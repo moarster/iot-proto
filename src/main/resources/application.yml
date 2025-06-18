@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: opcua-proto
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: meter_data
+      collection: meter_readings
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/timeseries_db
+    username: postgres
+    password: password
+    pool:
+      initial-size: 10
+      max-size: 20
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+
+opcua:
+  endpoint-url: "opc.tcp://localhost:4840"
+  username:
+  password:
+  application-name: "Spring Boot OPC UA Meter Client"
+  subscription-interval: 5000
+  node-ids:
+    - "ns=2;s=HotWaterMeter.Flow"
+    - "ns=2;s=HotWaterMeter.Temperature"
+    - "ns=2;s=ColdWaterMeter.Flow"
+    - "ns=2;s=ColdWaterMeter.Temperature"
+    - "ns=2;s=HeatMeter.Energy"
+    - "ns=2;s=HeatMeter.Power"
+
+logging:
+  level:
+    ru.iteco.opcua: DEBUG
+    org.eclipse.milo: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
