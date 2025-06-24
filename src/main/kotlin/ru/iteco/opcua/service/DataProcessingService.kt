@@ -1,6 +1,7 @@
 package ru.iteco.opcua.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.*
 import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
@@ -25,6 +26,11 @@ class DataProcessingService(
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /**
+     * Processes raw meter data by saving it to MongoDB, transforming and saving to PostgreSQL,
+     * and transforming and sending to Kafka, all concurrently.
+     * @param rawData The raw meter data received from OPC UA.
+     */
     suspend fun processData(rawData: RawMeterData) {
         // Process in three parallel coroutines
         coroutineScope {
@@ -65,9 +71,14 @@ class DataProcessingService(
         }
     }
 
-    // Alternative fire-and-forget version if you don't need to wait for completion
+    /**
+     * Alternative fire-and-forget version if you don't need to wait for completion of all steps
+     * within the `processData` call itself. This is less strict about error propagation
+     * back to the caller of `processDataAsync`.
+     * @param rawData The raw meter data received from OPC UA.
+     */
     fun processDataAsync(rawData: RawMeterData) {
-        // Launch all three operations independently without waiting
+        // Launch all three operations independently without waiting for their completion within this function
         ioScope.launch {
             try {
                 val savedData = saveToMongo(rawData)
@@ -98,11 +109,21 @@ class DataProcessingService(
         }
     }
 
+    /**
+     * Saves the raw meter data to MongoDB.
+     * @param rawData The raw meter data to save.
+     * @return The saved RawMeterData object.
+     */
     private suspend fun saveToMongo(rawData: RawMeterData): RawMeterData {
         return rawMeterDataRepository.save(rawData).awaitSingle()
     }
 
-
+    /**
+     * Transforms raw data into time series data and saves it to PostgreSQL.
+     * Assumes `dataTransformationService.transformToTimeSeries` performs the necessary CPU-bound transformation.
+     * @param rawData The raw meter data to transform.
+     * @return The saved MeterTimeSeries object, or null if transformation yields no data.
+     */
     private suspend fun transformAndSaveToPostgres(rawData: RawMeterData):  MeterTimeSeries? {
         return withContext(Dispatchers.Default) {
             // Transform on Default dispatcher (CPU-bound work)
@@ -115,6 +136,11 @@ class DataProcessingService(
         }
     }
 
+    /**
+     * Transforms raw data into a Kafka message and sends it to Kafka.
+     * Assumes `dataTransformationService.transformToKafkaMessage` performs the necessary CPU-bound transformation.
+     * @param rawData The raw meter data to transform.
+     */
     private suspend fun transformAndSendToKafka(rawData: RawMeterData) {
         val kafkaMessage = withContext(Dispatchers.Default) {
             // Transform on Default dispatcher (CPU-bound work)
@@ -130,8 +156,13 @@ class DataProcessingService(
         }
     }
 
-    // Clean up resources when service is destroyed
+    /**
+     * Cancels the coroutine scope used for async operations,
+     * ensuring proper resource cleanup when the service is destroyed.
+     */
+    @PreDestroy
     fun cleanup() {
+        logger.info("Shutting down DataProcessingService: Cancelling ioScope.")
         ioScope.cancel()
     }
 }
