@@ -24,11 +24,11 @@ spring:
       retries: 3
 
 opcua:
-  endpoint-url: "opc.tcp://localhost:4840"
+  endpoint-url: opc.tcp://172.16.10.237:4841
   username:
   password:
   application-name: "Spring Boot OPC UA Meter Client"
-  subscription-interval: 5000
+  subscription-interval: 15000
   node-ids:
     - "ns=2;s=HotWaterMeter.Flow"
     - "ns=2;s=HotWaterMeter.Temperature"
@@ -47,3 +47,4 @@ management:
     web:
       exposure:
         include: health,info,metrics
+debug: true

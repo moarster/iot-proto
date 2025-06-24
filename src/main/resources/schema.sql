@@ -2,12 +2,13 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 CREATE TABLE IF NOT EXISTS meter_timeseries (
-    id BIGSERIAL PRIMARY KEY,
+    id BIGSERIAL,
     meter_id VARCHAR(50) NOT NULL,
     meter_type VARCHAR(50) NOT NULL,
     value DOUBLE PRECISION NOT NULL,
     unit VARCHAR(20) NOT NULL,
-    timestamp TIMESTAMP NOT NULL
+    timestamp TIMESTAMP NOT NULL,
+    PRIMARY KEY (id, timestamp)
 );
 SELECT create_hypertable('meter_timeseries', 'timestamp', if_not_exists => TRUE);
 
@@ -16,4 +17,4 @@ CREATE INDEX IF NOT EXISTS idx_meter_timeseries_timestamp ON meter_timeseries(ti
 CREATE INDEX IF NOT EXISTS idx_meter_timeseries_meter_time ON meter_timeseries(meter_id, timestamp);
 
 ALTER TABLE meter_timeseries SET (timescaledb.compress, timescaledb.compress_orderby = 'timestamp DESC');
-SELECT add_compression_policy('meter_timeseries', INTERVAL '90 days');
+SELECT add_compression_policy('meter_timeseries', INTERVAL '90 days', if_not_exists => TRUE);
