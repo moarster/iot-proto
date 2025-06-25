@@ -23,9 +23,11 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned
+import org.eclipse.milo.opcua.stack.core.types.enumerated.ApplicationType
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn
+import org.eclipse.milo.opcua.stack.core.types.structured.ApplicationDescription
 import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription
 import org.eclipse.milo.opcua.stack.core.types.structured.MonitoredItemCreateRequest
 import org.eclipse.milo.opcua.stack.core.types.structured.MonitoringParameters
@@ -66,21 +68,45 @@ class OpcUaClientService(
 
             // First, let's discover endpoints from the server
             val endpoints = try {
+                //throw Exception()
                 DiscoveryClient.getEndpoints(opcUaConfig.endpointUrl).get()
             } catch (e: Exception) {
                 logger.error("Failed to discover endpoints, using manual endpoint creation", e)
                 // Fallback: create a basic endpoint manually
                 listOf(
-                    EndpointDescription.builder()
-                        .endpointUrl(opcUaConfig.endpointUrl)
-                        .securityPolicyUri("http://opcfoundation.org/UA/SecurityPolicy#None")
-                        .securityMode(MessageSecurityMode.None)
-                        .transportProfileUri("http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary")
-                        .build()
+                    EndpointDescription(
+                        opcUaConfig.endpointUrl,
+                        ApplicationDescription(
+                            "urn:bt6000:UnifiedAutomation:UaTeploServer",
+                            "urn:dummy:opcua:server:product",
+                            LocalizedText("en", "Dummy OPC UA Server"),
+                            ApplicationType.Server,
+                            null,
+                            null,
+                            emptyArray()
+                        ),
+                       null,
+                       MessageSecurityMode.None,
+                       "http://opcfoundation.org/UA/SecurityPolicy#None",
+                       emptyArray(),
+                      "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary",
+                        org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte.MIN
+                    )
                 )
             }
-
-            val endpoint = endpoints.find {
+            val rewrittenEndpoints = endpoints.map { original ->
+                EndpointDescription(
+                    opcUaConfig.endpointUrl,
+                    original.server,
+                    original.serverCertificate,
+                    original.securityMode,
+                    original.securityPolicyUri,
+                    original.userIdentityTokens,
+                    original.transportProfileUri,
+                    original.securityLevel
+                )
+            }
+            val endpoint = rewrittenEndpoints.find {
                 it.securityMode == MessageSecurityMode.None
             } ?: endpoints.firstOrNull()
 

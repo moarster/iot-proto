@@ -30,14 +30,11 @@ opcua:
   application-name: "Spring Boot OPC UA Meter Client"
   subscription-interval: 5000
   node-ids:
-    - "ns=2;s=GIUSController"
-    - "ns=2;s=HotWaterMeter.Flow"
-    - "ns=2;s=HotWaterMeter.Temperature"
-    - "ns=2;s=ColdWaterMeter.Flow"
-    - "ns=2;s=ColdWaterMeter.Temperature"
-    - "ns=2;s=HeatMeter.Energy"
-    - "ns=2;s=HeatMeter.Power"
-    - "ns=2;s=HeatMeteringSubsystem"
+    - "ns=2;s=GIUSController.Address"
+    - "ns=2;s=GIUSController.DateTime"
+    - "ns=2;s=GIUSController.GUID"
+    - "ns=2;s=GIUSController.Model"
+    - "ns=2;s=GIUSController.Product"
 
 logging:
   level:
