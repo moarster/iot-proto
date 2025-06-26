@@ -24,17 +24,17 @@ spring:
       retries: 3
 
 opcua:
-  endpoint-url: "opc.tcp://172.16.10.237:4841"
-  username:
-  password:
+  endpoints:
+    - url: "opc.tcp://172.16.10.237:4841"
+      type: heat
+      meters:
+        - guid: 3e97ec0a-3ad8-4ce8-be06-056e3f19861b
+          subs: [1]
+        - guid: 59e39388-c93b-4ab6-87d8-eaf608624fa4
+          subs: [1]
   application-name: "Spring Boot OPC UA Meter Client"
   subscription-interval: 5000
-  node-ids:
-    - "ns=2;s=GIUSController.Address"
-    - "ns=2;s=GIUSController.DateTime"
-    - "ns=2;s=GIUSController.GUID"
-    - "ns=2;s=GIUSController.Model"
-    - "ns=2;s=GIUSController.Product"
+
 
 logging:
   level:

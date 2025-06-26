@@ -26,6 +26,7 @@ data class RawMeterData(
     @Id
     val id: String? = null,
     val nodeId: String,
+    val endpointUrl: String,
     val value: Any,
     val dataType: String,
     val quality: String,

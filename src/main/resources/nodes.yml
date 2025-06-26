@@ -1,0 +1,543 @@
+$schema: http://json-schema.org/draft-07/schema#
+type: object
+properties:
+  GIUSController:
+    type: object
+    description: Параметры OPC UA сервера (включая статус, текущее время, перечисление поддерживаемых профилей)
+    properties:
+      Product:
+        type: string
+        description: Производитель УСПД
+      Model:
+        type: string
+        description: Модель УСПД
+      SerialNumber:
+        type: string
+        description: Серийный номер УСПД
+      Firmware:
+        type: string
+        description: Версия прошивки УСПД
+      Address:
+        type: string
+        description: Адрес размещения
+      Location:
+        type: string
+        description: GPS координаты места размещения (Lon/Lat)
+      NumCam:
+        type: string
+        description: Номер камеры ЦТП
+      SIM1Op:
+        type: string
+        description: Оператор сотовой связи на SIM1
+      SIM1Num:
+        type: string
+        description: Номер телефона на SIM1
+      SIM2Op:
+        type: string
+        description: Оператор сотовой связи на SIM2
+      SIM2Num:
+        type: string
+        description: Номер телефона на SIM2
+      ObjectUID:
+        type: string
+        description: Идентификатор объекта размещения
+      OrgUID:
+        type: string
+        description: Идентификатор организации потребителя
+      GUID:
+        type: string
+        description: Глобальный идентификатор
+        format: uuid
+      PrDate:
+        type: string
+        description: Дата производства
+        format: date-time
+      PovDate:
+        type: string
+        description: Дата поверки
+        format: date-time
+      NextPovDate:
+        type: string
+        description: Срок следующей поверки
+        format: date-time
+      State:
+        type: integer
+        description: Код состояния УСПД
+        format: uint32
+      Timezone:
+        type: string
+        description: Часовой пояс УСПД
+      LastOff:
+        type: string
+        description: Время последнего выключение учета
+        format: date-time
+      LastOn:
+        type: string
+        description: Время последнего включения учета
+        format: date-time
+      Sig:
+        type: integer
+        description: "События сигнализации: Отрыв от стены, Открытие блок-бокса, Отсутствие внешнего электропитания, Прочие аварии"
+        format: uint32
+      BridgedDevice:
+        type: array
+        description: Ссылка на объект типа BridgedDeviceType для каждого подключенного шлюзованного по RS-485 устройства
+        items:
+          type: object
+          properties:
+            Connected:
+              type: boolean
+              description: Есть связь по порту
+            Type:
+              type: string
+              description: Тип устройства
+            OwnerOrg:
+              type: string
+              description: Организация - владелец устройства
+            TT:
+              type: string
+              description: Производитель, модель устройства через /
+            PortNum:
+              type: string
+              description: Номер порта
+            PortType:
+              type: string
+              description: "Тип порта: RS-232, RS-485"
+              enum:
+                - RS-232
+                - RS-485
+            Speed:
+              type: integer
+              description: Скорость передачи данных
+              format: uint32
+            Parity:
+              type: integer
+              description: Четность
+              format: byte
+            NumDataBits:
+              type: integer
+              description: Количество бит данных
+              format: byte
+            NumStopBits:
+              type: integer
+              description: Количество стоп битов
+              format: byte
+    patternProperties:
+      ^(?:[0-9a-fA-F]){8}-(?:[0-9a-fA-F]){4}-(?:[0-9a-fA-F]){4}-(?:[0-9a-fA-F]){4}-(?:[0-9a-fA-F]){12}$:
+        description: Подключенный узел теплосчетчика
+        type: object
+        properties:
+          Connected:
+            type: boolean
+            description: Есть связь по порту
+          PortNum:
+            type: string
+            description: Номер порта
+          PortType:
+            type: string
+            description: "Тип порта: RS-232, RS-485, USB, Ethernet"
+            enum:
+              - RS-232
+              - RS-485
+              - USB
+              - Ethernet
+          Speed:
+            type: integer
+            description: Скорость передачи данных
+            format: uint32
+          Parity:
+            type: integer
+            description: Четность
+            format: byte
+          NumDataBits:
+            type: integer
+            description: Количество бит данных
+            format: byte
+          NumStopBits:
+            type: integer
+            description: Количество стоп битов
+            format: byte
+          MeterManufacturer:
+            type: string
+            description: Производитель ПУ
+          MeterModel:
+            type: string
+            description: Модель ПУ
+          Firmware:
+            type: string
+            description: Версия прошивки теплосчетчика
+          SerialNumber:
+            type: string
+            description: Серийный номер теплосчетчика
+          PrDate:
+            type: string
+            description: Дата производства
+            format: date-time
+          PovDate:
+            type: string
+            description: Дата поверки
+            format: date-time
+          NextPovDate:
+            type: string
+            description: Срок следующей поверки
+            format: date-time
+          TSType:
+            type: integer
+            description: Тип схемы измерения системы теплоснабжения по классификатору
+            format: byte
+          S:
+            type: integer
+            description: Код состояния прибора учета по классификатору
+            format: uint32
+          SA1:
+            type: integer
+            description: Код состояния прибора учета по классификатору - архив минутных значений за час
+            format: uint32
+          SA2:
+            type: integer
+            description: Код состояния прибора учета по классификатору - архив часовых значений за сутки
+            format: uint32
+          SA3:
+            type: integer
+            description: Код состояния прибора учета по классификатору - архив суточных значений за месяц
+            format: uint32
+          LastOff:
+            type: string
+            description: Время последнего выключения учета
+            format: date-time
+          LastOn:
+            type: string
+            description: Время последнего включения учета
+            format: date-time
+          MDateTime:
+            type: string
+            description: Текущее время теплосчетчика
+            format: date-time
+        patternProperties:
+          ^\d$:
+            type: object
+            description: Логический узел съема измерений тепловых ресурсов
+            properties:
+              ResType:
+                type: string
+                description: "Тип узла: ГВС, ЦО, Вент"
+                enum:
+                  - ГВС
+                  - ЦО
+                  - Вент
+              Current:
+                type: object
+                properties:
+                  Q1:
+                    type: number
+                    description: объем теплоносителя, отпущенного по подающему трубопроводу
+                    unit: м3/ч
+                  Q2:
+                    type: number
+                    description: объем теплоносителя, отпущенного по обратному трубопроводу
+                    unit: м3/ч
+                  Q3:
+                    type: number
+                    description: объем теплоносителя, отпущенного по трубопроводу подпитки
+                    unit: м3/ч
+                  M1:
+                    type: number
+                    description: масса теплоносителя, отпущенного по подающему трубопроводу
+                    unit: т/ч
+                  M2:
+                    type: number
+                    description: масса теплоносителя, отпущенного по обратному трубопроводу
+                    unit: т/ч
+                  M3:
+                    type: number
+                    description: масса теплоносителя, отпущенного по трубопроводу подпитки
+                    unit: т/ч
+                  T1:
+                    type: number
+                    description: температура теплоносителя в подающем трубопроводе
+                    unit: °С
+                  T2:
+                    type: number
+                    description: температура теплоносителя в обратном трубопроводе
+                    unit: °С
+                  T3:
+                    type: number
+                    description: температура теплоносителя в трубопроводе подпитки
+                    unit: °С
+                  P1:
+                    type: number
+                    description: давление теплоносителя в подающем трубопроводе
+                    unit: атм
+                  P2:
+                    type: number
+                    description: давление теплоносителя в обратном трубопроводе
+                    unit: атм
+                  P3:
+                    type: number
+                    description: давление теплоносителя в трубопроводе подпитки
+                    unit: атм
+                  dP:
+                    type: number
+                    description: разница давления в подающем и обратном трубопроводе
+                    unit: атм
+                  ER:
+                    type: integer
+                    description: Текущие ошибки прибора учета
+                    format: uint32
+                  IE1:
+                    type: number
+                    description: Нарастающий итог отпущенной тепловой энергии
+                    unit: Гкал
+                  IT1:
+                    type: number
+                    description: Нарастающий итог времени наработки
+                    unit: час
+                  IQ1:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя, отпущенного по подающему трубопроводу
+                    unit: м3
+                  IQ2:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя, отпущенного по обратному трубопроводу
+                    unit: м3
+                  IQ3:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя, отпущенного по трубопроводу подпитки
+                    unit: м3
+                  IM1:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по подающему трубопроводу
+                    unit: Т
+                  IM2:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по обратному трубопроводу
+                    unit: Т
+                  IM3:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по трубопроводу подпитки
+                    unit: Т
+              History:
+                type: object
+                properties:
+                  A1:
+                    type: number
+                    description: Нарастающий итог отпущенной тепловой энергии (интегральное значение на момент формирования архивной записи)
+                    unit: Гкал
+                  A2:
+                    type: number
+                    description: отпущенная тепловая энергия (за час)
+                    unit: Гкал
+                  A3:
+                    type: number
+                    description: время наработки (за час)
+                    unit: час
+                  A4:
+                    type: number
+                    description: Нарастающий итог времени наработки (интегральное значение)
+                    unit: час
+                  A5:
+                    type: number
+                    description: объем теплоносителя по подающему трубопроводу (за час)
+                    unit: М³
+                  A6:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя по подающему трубопроводу (интегральное значение)
+                    unit: М³
+                  A7:
+                    type: number
+                    description: объем теплоносителя по обратному трубопроводу (за час)
+                    unit: М³
+                  A8:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя по обратному трубопроводу (интегральное значение)
+                    unit: М³
+                  A9:
+                    type: number
+                    description: объем теплоносителя по трубопроводу подпитки (за час)
+                    unit: М³
+                  A10:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя по трубопроводу подпитки (интегральное значение)
+                    unit: М³
+                  A11:
+                    type: number
+                    description: масса теплоносителя, отпущенного по подающему трубопроводу (за час)
+                    unit: Т
+                  A12:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по подающему трубопроводу (интегральное значение)
+                    unit: Т
+                  A13:
+                    type: number
+                    description: масса теплоносителя, отпущенного по обратному трубопроводу (за час)
+                    unit: Т
+                  A14:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по обратному трубопроводу (интегральное значение)
+                    unit: Т
+                  A15:
+                    type: number
+                    description: масса теплоносителя по трубопроводу подпитки (за час)
+                    unit: Т
+                  A16:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя по трубопроводу подпитки (интегральное значение)
+                    unit: Т
+                  A17:
+                    type: number
+                    description: среднее давление теплоносителя в подающем трубопроводе (за час)
+                    unit: Атм
+                  A18:
+                    type: number
+                    description: среднее давление теплоносителя в обратном трубопроводе (за час)
+                    unit: Атм
+                  A19:
+                    type: number
+                    description: среднее давление теплоносителя в трубопроводе подпитки (за час)
+                    unit: Атм
+                  A20:
+                    type: number
+                    description: средняя температура теплоносителя в подающем трубопроводе (за час)
+                    unit: °С
+                  A21:
+                    type: number
+                    description: средняя температура теплоносителя в обратном трубопроводе (за час)
+                    unit: °С
+                  A22:
+                    type: number
+                    description: средняя температура теплоносителя в трубопроводе подпитки (за час)
+                    unit: °С
+                  A23:
+                    type: number
+                    description: Время отсутствия электропитания (за час)
+                    unit: час
+                  A24:
+                    type: number
+                    description: Время delta_T меньше минимальной (за час)
+                    unit: час
+                  A25:
+                    type: number
+                    description: Время расход меньше минимального (за час)
+                    unit: час
+                  A26:
+                    type: number
+                    description: Время расход больше максимального (за час)
+                    unit: час
+                  A27:
+                    type: number
+                    description: Время простоя теплосистемы (за час)
+                    unit: час
+                  A28:
+                    type: number
+                    description: Ошибки, которые произошли с прибором и/или отдельной теплосистемой за время данного периода архивирования
+                  A29:
+                    type: number
+                    description: Нарастающий итог отпущенной тепловой энергии (интегральное значение на момент формирования архивной записи)
+                    unit: Гкал
+                  A30:
+                    type: number
+                    description: отпущенная тепловая энергия (за сутки)
+                    unit: Гкал
+                  A31:
+                    type: number
+                    description: время наработки (за сутки)
+                    unit: час
+                  A32:
+                    type: number
+                    description: Нарастающий итог времени наработки (интегральное значение)
+                    unit: час
+                  A33:
+                    type: number
+                    description: объем теплоносителя по подающему трубопроводу (за сутки)
+                    unit: М³
+                  A34:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя по подающему трубопроводу (интегральное значение)
+                    unit: М³
+                  A35:
+                    type: number
+                    description: объем теплоносителя по обратному трубопроводу (за сутки)
+                    unit: М³
+                  A36:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя по обратному трубопроводу (интегральное значение)
+                    unit: М³
+                  A37:
+                    type: number
+                    description: объем теплоносителя по трубопроводу подпитки (за сутки)
+                    unit: М³
+                  A38:
+                    type: number
+                    description: Нарастающий итог объема теплоносителя по трубопроводу подпитки (интегральное значение)
+                    unit: М³
+                  A39:
+                    type: number
+                    description: масса теплоносителя, отпущенного по подающему трубопроводу (за сутки)
+                    unit: Т
+                  A40:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по подающему трубопроводу (интегральное значение)
+                    unit: Т
+                  A41:
+                    type: number
+                    description: масса теплоносителя, отпущенного по обратному трубопроводу (за сутки)
+                    unit: Т
+                  A42:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя, отпущенного по обратному трубопроводу (интегральное значение)
+                    unit: Т
+                  A43:
+                    type: number
+                    description: масса теплоносителя по трубопроводу подпитки (за сутки)
+                    unit: Т
+                  A44:
+                    type: number
+                    description: Нарастающий итог массы теплоносителя по трубопроводу подпитки (интегральное значение)
+                    unit: Т
+                  A45:
+                    type: number
+                    description: среднее давление теплоносителя в подающем трубопроводе (за сутки)
+                    unit: Атм
+                  A46:
+                    type: number
+                    description: среднее давление теплоносителя в обратном трубопроводе (за сутки)
+                    unit: Атм
+                  A47:
+                    type: number
+                    description: среднее давление теплоносителя в трубопроводе подпитки (за сутки)
+                    unit: Атм
+                  A48:
+                    type: number
+                    description: среднея температура теплоносителя в подающем трубопроводе (за сутки)
+                    unit: °С
+                  A49:
+                    type: number
+                    description: среднея температура теплоносителя в обратном трубопроводе (за сутки)
+                    unit: °С
+                  A50:
+                    type: number
+                    description: среднея температура теплоносителя в трубопроводе подпитки (за сутки)
+                    unit: °С
+                  A51:
+                    type: number
+                    description: Время отсутствия электропитания (за сутки)
+                    unit: час
+                  A52:
+                    type: number
+                    description: Время delta_T меньше минимальной (за сутки)
+                    unit: час
+                  A53:
+                    type: number
+                    description: Время расход меньше минимального (за сутки)
+                    unit: час
+                  A54:
+                    type: number
+                    description: Время расход больше максимального (за сутки)
+                    unit: час
+                  A55:
+                    type: number
+                    description: Время простоя теплосистемы (за сутки)
+                    unit: час
+                  A56:
+                    type: number
+                    description: Ошибки, которые произошли с прибором и/или отдельной теплосистемой за время данного периода архивирования

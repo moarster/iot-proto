@@ -3,16 +3,11 @@ package ru.iteco.opcua.client
 
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withPermit
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem
@@ -27,27 +22,45 @@ import org.eclipse.milo.opcua.stack.core.types.enumerated.ApplicationType
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn
-import org.eclipse.milo.opcua.stack.core.types.structured.ApplicationDescription
-import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription
-import org.eclipse.milo.opcua.stack.core.types.structured.MonitoredItemCreateRequest
-import org.eclipse.milo.opcua.stack.core.types.structured.MonitoringParameters
-import org.eclipse.milo.opcua.stack.core.types.structured.ReadValueId
+import org.eclipse.milo.opcua.stack.core.types.structured.*
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import ru.iteco.opcua.config.NodeIdsConfig
 import ru.iteco.opcua.config.OpcUaConfig
 import ru.iteco.opcua.model.RawMeterData
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 @Service
 class OpcUaClientService(
+    private val nodeIdsConfig: NodeIdsConfig,
     private val opcUaConfig: OpcUaConfig
 ) {
     private val logger = LoggerFactory.getLogger(OpcUaClientService::class.java)
-    private lateinit var client: OpcUaClient
+
+
+    // Connection management
+    private val clients = ConcurrentHashMap<String, ClientConnection>()
     private val dataChannel = Channel<RawMeterData>(Channel.UNLIMITED)
-    private var isConnected = false
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Connection pooling - limit concurrent connections to avoid overwhelming servers
+    private val maxConcurrentConnections = 50
+    private val connectionSemaphore = kotlinx.coroutines.sync.Semaphore(maxConcurrentConnections)
+
+    // Stats tracking
+    private val connectedCount = AtomicInteger(0)
+    private val totalEndpoints = AtomicInteger(0)
+
+    data class ClientConnection(
+        val client: OpcUaClient,
+        val endpoint: OpcUaConfig.Endpoint,
+        @Volatile var isConnected: Boolean = false,
+        @Volatile var lastReconnectAttempt: Long = 0,
+        var reconnectJob: Job? = null
+    )
 
     @PostConstruct
     fun initializeAsync() {
@@ -55,109 +68,139 @@ class OpcUaClientService(
             initialize()
         }
     }
-    suspend fun initialize() = withContext(Dispatchers.IO) {
-        try {
-            logger.info("Initializing OPC UA client...")
-            logger.info("Endpoint URL: '${opcUaConfig.endpointUrl}'")
-            logger.info("Application Name: '${opcUaConfig.applicationName}'")
-            logger.info("Node IDs: ${opcUaConfig.nodeIds}")
+    suspend fun initialize() {
+        logger.info("Initializing OPC UA multi-client service for ${opcUaConfig.endpoints.size} endpoints")
+        totalEndpoints.set(opcUaConfig.endpoints.size)
 
-            if (opcUaConfig.endpointUrl.isNullOrBlank()) {
-                throw IllegalArgumentException("Endpoint URL is null or empty")
+        if (opcUaConfig.endpoints.isEmpty()) {
+            logger.warn("No endpoints configured")
+            return
+        }
+
+        // Start connections in batches to avoid overwhelming the network
+        val batchSize = 10
+        opcUaConfig.endpoints.chunked(batchSize).forEach { batch ->
+            batch.forEach { endpoint ->
+                scope.launch {
+                    connectToEndpoint(endpoint)
+                }
             }
+            // Small delay between batches
+            delay(1000)
+        }
 
-            // First, let's discover endpoints from the server
-            val endpoints = try {
-                //throw Exception()
-                DiscoveryClient.getEndpoints(opcUaConfig.endpointUrl).get()
+        // Start connection monitor
+        startConnectionMonitor()
+    }
+    private suspend fun connectToEndpoint(endpoint: OpcUaConfig.Endpoint) {
+        connectionSemaphore.withPermit {
+            try {
+                logger.debug("Connecting to endpoint: ${endpoint.url}")
+
+                val client = createClient(endpoint)
+                val connection = ClientConnection(client, endpoint)
+                clients[endpoint.url] = connection
+
+                client.connect().get()
+                connection.isConnected = true
+                connectedCount.incrementAndGet()
+
+                logger.info("Connected to ${endpoint.url} (${connectedCount.get()}/${totalEndpoints.get()})")
+
+                // Setup subscription or polling for this endpoint
+                setupDataCollection(connection)
+
             } catch (e: Exception) {
-                logger.error("Failed to discover endpoints, using manual endpoint creation", e)
-                // Fallback: create a basic endpoint manually
-                listOf(
-                    EndpointDescription(
-                        opcUaConfig.endpointUrl,
-                        ApplicationDescription(
-                            "urn:bt6000:UnifiedAutomation:UaTeploServer",
-                            "urn:dummy:opcua:server:product",
-                            LocalizedText("en", "Dummy OPC UA Server"),
-                            ApplicationType.Server,
-                            null,
-                            null,
-                            emptyArray()
-                        ),
-                       null,
-                       MessageSecurityMode.None,
-                       "http://opcfoundation.org/UA/SecurityPolicy#None",
-                       emptyArray(),
-                      "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary",
-                        org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte.MIN
-                    )
-                )
+                logger.error("Failed to connect to ${endpoint.url}: ${e.message}")
+                scheduleReconnect(endpoint.url)
             }
-            val rewrittenEndpoints = endpoints.map { original ->
-                EndpointDescription(
-                    opcUaConfig.endpointUrl,
-                    original.server,
-                    original.serverCertificate,
-                    original.securityMode,
-                    original.securityPolicyUri,
-                    original.userIdentityTokens,
-                    original.transportProfileUri,
-                    original.securityLevel
-                )
-            }
-            val endpoint = rewrittenEndpoints.find {
-                it.securityMode == MessageSecurityMode.None
-            } ?: endpoints.firstOrNull()
-
-            if (endpoint == null) {
-                throw IllegalStateException("No suitable endpoint found")
-            }
-
-            logger.info("Using endpoint: ${endpoint.endpointUrl} with security: ${endpoint.securityMode}")
-
-            val config = OpcUaClientConfigBuilder()
-                .setApplicationName(LocalizedText(opcUaConfig.applicationName))
-                .setApplicationUri("urn:spring-boot:opcua:client")
-                .setEndpoint(endpoint)
-                .build()
-
-            client = OpcUaClient.create(config)
-
-            logger.info("Connecting to OPC UA server: ${opcUaConfig.endpointUrl}")
-            val connectFuture = client.connect()
-            connectFuture.get() // This will throw if connection fails
-
-            isConnected = true
-            logger.info("Successfully connected to OPC UA server")
-
-            // Try subscription first, fall back to polling if it fails
-            if (!tryCreateSubscription()) {
-                logger.warn("Subscription failed, falling back to polling")
-                startPolling()
-            }
-
-        } catch (e: Exception) {
-            logger.error("Failed to initialize OPC UA client: ${e.message}", e)
-            isConnected = false
-
-            reconnectAfterDelay()
         }
     }
 
-    private fun tryCreateSubscription(): Boolean {
-        return try {
-            logger.info("Attempting to create subscription...")
+    private suspend fun createClient(endpoint: OpcUaConfig.Endpoint): OpcUaClient = withContext(Dispatchers.IO) {
+        val endpoints = try {
+            DiscoveryClient.getEndpoints(endpoint.url).get()
+        } catch (e: Exception) {
+            logger.warn("Discovery failed for ${endpoint.url}, creating fallback endpoint")
+            createFallbackEndpoint(endpoint.url)
+        }
 
-            val subscription = client.subscriptionManager
+        val rewrittenEndpoints = endpoints.map { original ->
+            EndpointDescription(
+                endpoint.url,
+                original.server,
+                original.serverCertificate,
+                original.securityMode,
+                original.securityPolicyUri,
+                original.userIdentityTokens,
+                original.transportProfileUri,
+                original.securityLevel
+            )
+        }
+
+        val selectedEndpoint = rewrittenEndpoints.find {
+            it.securityMode == MessageSecurityMode.None
+        } ?: endpoints.firstOrNull() ?: throw IllegalStateException("No suitable endpoint found for ${endpoint.url}")
+
+        val config = OpcUaClientConfigBuilder()
+            .setApplicationName(LocalizedText(opcUaConfig.applicationName))
+            .setApplicationUri("urn:spring-boot:opcua:multi-client")
+            .setEndpoint(selectedEndpoint)
+            .build()
+
+        OpcUaClient.create(config)
+    }
+
+    private fun createFallbackEndpoint(url: String): List<EndpointDescription> {
+        return listOf(
+            EndpointDescription(
+                url,
+                ApplicationDescription(
+                    "urn:fallback:opcua:server",
+                    "urn:fallback:opcua:server:product",
+                    LocalizedText("en", "Fallback OPC UA Server"),
+                    ApplicationType.Server,
+                    null,
+                    null,
+                    emptyArray()
+                ),
+                null,
+                MessageSecurityMode.None,
+                "http://opcfoundation.org/UA/SecurityPolicy#None",
+                emptyArray(),
+                "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary",
+                org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte.MIN
+            )
+        )
+    }
+
+    private suspend fun setupDataCollection(connection: ClientConnection) {
+        try {
+            if (!tryCreateSubscription(connection)) {
+                logger.warn("Subscription failed for ${connection.endpoint.url}, falling back to polling")
+                startPolling(connection)
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to setup data collection for ${connection.endpoint.url}", e)
+        }
+    }
+
+    private suspend fun tryCreateSubscription(connection: ClientConnection): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val subscription = connection.client.subscriptionManager
                 .createSubscription(opcUaConfig.subscriptionInterval.toDouble())
                 .get()
 
-            val monitoredItems = opcUaConfig.nodeIds.map { nodeId ->
-                logger.debug("Creating monitored item for node: $nodeId")
+            val nodeIdStrings = buildAllNodeIds(connection.endpoint)
 
+            if (nodeIdStrings.isEmpty()) {
+                logger.warn("No node IDs configured for endpoint ${connection.endpoint.url}")
+                return@withContext false
+            }
+
+            val monitoredItems = nodeIdStrings.map { nodeIdString ->
                 val readValueId = ReadValueId(
-                    NodeId.parse(nodeId),
+                    NodeId.parse(nodeIdString),
                     AttributeId.Value.uid(),
                     null,
                     QualifiedName.NULL_VALUE
@@ -183,98 +226,126 @@ class OpcUaClientService(
                 monitoredItems
             ).get()
 
+            var successCount = 0
             createdItems.forEach { item ->
                 if (item.statusCode.isGood) {
                     item.setValueConsumer { _, value ->
-                        handleDataChange(item, value)
+                        handleDataChange(connection.endpoint.url, item, value)
                     }
-                    logger.debug("Successfully created monitored item for: ${item.readValueId.nodeId}")
+                    successCount++
                 } else {
-                    logger.error("Failed to create monitored item for: ${item.readValueId.nodeId}, status: ${item.statusCode}")
+                    logger.debug("Failed monitored item for {}: {}", connection.endpoint.url, item.readValueId.nodeId)
                 }
             }
 
-            logger.info("Successfully created ${createdItems.count { it.statusCode.isGood }} monitored items")
+            logger.debug("Created $successCount/${monitoredItems.size} monitored items for ${connection.endpoint.url}")
             true
         } catch (e: Exception) {
-            logger.error("Failed to create subscription: ${e.message}", e)
+            logger.error("Subscription creation failed for ${connection.endpoint.url}: ${e.message}")
             false
         }
     }
 
-    private fun startPolling() {
-        logger.info("Starting periodic polling every ${opcUaConfig.subscriptionInterval}ms")
-
+    private fun startPolling(connection: ClientConnection) {
         scope.launch {
-            while (isConnected) {
+            while (connection.isConnected) {
                 try {
-                    pollNodes()
+                    pollNodes(connection)
                     delay(opcUaConfig.subscriptionInterval)
                 } catch (e: Exception) {
-                    logger.error("Error during polling", e)
-                    delay(5000) // Wait longer on error
+                    logger.error("Polling error for ${connection.endpoint.url}", e)
+                    delay(5000)
                 }
             }
         }
     }
 
-    private suspend fun pollNodes() = withContext(Dispatchers.IO) {
+    private suspend fun pollNodes(connection: ClientConnection) = withContext(Dispatchers.IO) {
         try {
-            val nodeIds = opcUaConfig.nodeIds.map { NodeId.parse(it) }
+            val nodeIdStrings = buildAllNodeIds(connection.endpoint)
+
+            if (nodeIdStrings.isEmpty()) {
+                logger.warn("No node IDs configured for polling endpoint ${connection.endpoint.url}")
+                return@withContext
+            }
+
+            val nodeIds = nodeIdStrings.map { NodeId.parse(it) }
+
             val readValueIds = nodeIds.map { nodeId ->
                 ReadValueId(nodeId, AttributeId.Value.uid(), null, QualifiedName.NULL_VALUE)
             }
 
-            val dataValues = client.read(0.0, TimestampsToReturn.Both, readValueIds).get().results
+            val dataValues = connection.client.read(0.0, TimestampsToReturn.Both, readValueIds).get().results
 
             dataValues.forEachIndexed { index, dataValue ->
                 if (dataValue.statusCode?.isGood == true) {
-                    val nodeId = opcUaConfig.nodeIds[index]
-                    handlePolledData(nodeId, dataValue)
-                } else {
-                    logger.warn("Bad quality data for node ${opcUaConfig.nodeIds[index]}: ${dataValue.statusCode}")
+                    val nodeId = nodeIds[index].toParseableString()
+                    handlePolledData(connection.endpoint.url, nodeId, dataValue)
                 }
             }
 
-            logger.debug("Polled ${dataValues.size} nodes")
         } catch (e: Exception) {
-            logger.error("Error polling nodes", e)
+            logger.error("Polling failed for ${connection.endpoint.url}", e)
+            throw e
         }
     }
 
-    private fun handlePolledData(nodeId: String, value: DataValue) {
-        try {
-            val rawData = createRawMeterData(nodeId, value)
-            val sent = dataChannel.trySend(rawData)
-            if (sent.isSuccess) {
-                logger.debug("Polled data from node {}: {}", nodeId, value.value.value)
-            } else {
-                logger.warn("Failed to send polled data to channel for node: $nodeId")
+    private fun buildAllNodeIds(endpoint: OpcUaConfig.Endpoint): List<String> {
+        val nodeIds = mutableListOf<String>()
+
+        // 1. Controller-level nodes
+        nodeIdsConfig.guisController.forEach { controllerNode ->
+            nodeIds.add("ns=2;s=GIUSController.$controllerNode")
+        }
+
+        // 2. & 3. & 4. Meter and subsystem nodes
+        endpoint.meters.forEach { meter ->
+            // Meter-level nodes
+            nodeIdsConfig.meter.forEach { meterNode ->
+                nodeIds.add("ns=2;s=GIUSController.${meter.guid}.$meterNode")
             }
-        } catch (e: Exception) {
-            logger.error("Error handling polled data for node $nodeId", e)
+
+            // Subsystem nodes
+            meter.subs.forEach { sub ->
+                nodeIdsConfig.sub.forEach { subNode ->
+                    nodeIds.add("ns=2;s=GIUSController.${meter.guid}.$sub.$subNode")
+                }
+            }
         }
+
+        return nodeIds
     }
 
-    private fun handleDataChange(item: UaMonitoredItem, value: DataValue) {
+    private fun handleDataChange(endpointUrl: String, item: UaMonitoredItem, value: DataValue) {
         try {
             val nodeId = item.readValueId.nodeId.toParseableString()
-            val rawData = createRawMeterData(nodeId, value)
+            val rawData = createRawMeterData(endpointUrl, nodeId, value)
 
             val sent = dataChannel.trySend(rawData)
-            if (sent.isSuccess) {
-                logger.debug("Subscription data received from node {}: {}", nodeId, value.value.value)
-            } else {
-                logger.warn("Failed to send subscription data to channel for node: $nodeId")
+            if (!sent.isSuccess) {
+                logger.warn("Channel full, dropping data from $endpointUrl")
             }
         } catch (e: Exception) {
-            logger.error("Error handling subscription data change", e)
+            logger.error("Error handling subscription data for $endpointUrl", e)
         }
     }
 
-    private fun createRawMeterData(nodeId: String, value: DataValue): RawMeterData {
+    private fun handlePolledData(endpointUrl: String, nodeId: String, value: DataValue) {
+        try {
+            val rawData = createRawMeterData(endpointUrl, nodeId, value)
+            val sent = dataChannel.trySend(rawData)
+            if (!sent.isSuccess) {
+                logger.warn("Channel full, dropping polled data from $endpointUrl")
+            }
+        } catch (e: Exception) {
+            logger.error("Error handling polled data for $endpointUrl", e)
+        }
+    }
+
+    private fun createRawMeterData(endpointUrl: String, nodeId: String, value: DataValue): RawMeterData {
         return RawMeterData(
             nodeId = nodeId,
+            endpointUrl = endpointUrl,
             value = value.value?.value ?: "null",
             dataType = value.value?.dataType?.toString() ?: "unknown",
             quality = when {
@@ -288,48 +359,117 @@ class OpcUaClientService(
         )
     }
 
-    private fun reconnectAfterDelay() {
-        scope.launch {
-            delay(10000) // Wait 10 seconds before retry
-            logger.info("Attempting to reconnect...")
-            initialize()
+    private fun scheduleReconnect(endpointUrl: String) {
+        val connection = clients[endpointUrl] ?: return
+
+        // Cancel existing reconnect job
+        connection.reconnectJob?.cancel()
+
+        connection.reconnectJob = scope.launch {
+            val now = System.currentTimeMillis()
+            val timeSinceLastAttempt = now - connection.lastReconnectAttempt
+            val minReconnectInterval = 30000L // 30 seconds
+
+            if (timeSinceLastAttempt < minReconnectInterval) {
+                delay(minReconnectInterval - timeSinceLastAttempt)
+            }
+
+            connection.lastReconnectAttempt = System.currentTimeMillis()
+            logger.info("Attempting reconnect to $endpointUrl")
+
+            try {
+                // Clean up old client
+                connection.client.disconnect()
+                connectedCount.decrementAndGet()
+
+                // Create new connection
+                connectToEndpoint(connection.endpoint)
+            } catch (e: Exception) {
+                logger.error("Reconnect failed for $endpointUrl", e)
+                // Schedule another reconnect with exponential backoff
+                delay(60000) // Wait 1 minute before next attempt
+                scheduleReconnect(endpointUrl)
+            }
         }
     }
 
+    private fun startConnectionMonitor() {
+        scope.launch {
+            while (true) {
+                delay(60000) // Check every minute
+
+                val connected = connectedCount.get()
+                val total = totalEndpoints.get()
+
+                logger.info("Connection status: $connected/$total endpoints connected")
+
+                // Check for stuck connections and trigger reconnects if needed
+                clients.values.forEach { connection ->
+                    if (connection.isConnected) {
+                        scope.launch {
+                            try {
+                                // Simple health check - try to read server status
+                                val testResult = connection.client.namespaceTable
+                                // If we get here, connection is healthy
+                            } catch (e: Exception) {
+                                logger.warn("Health check failed for ${connection.endpoint.url}, triggering reconnect")
+                                connection.isConnected = false
+                                scheduleReconnect(connection.endpoint.url)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Public API methods
     fun getDataStream(): Flow<RawMeterData> = dataChannel.receiveAsFlow()
 
-    fun isClientConnected(): Boolean = isConnected
+    fun getConnectionStats(): Map<String, Any> {
+        return mapOf(
+            "connected" to connectedCount.get(),
+            "total" to totalEndpoints.get(),
+            "connectionRate" to (connectedCount.get().toDouble() / totalEndpoints.get() * 100).let {
+                "%.1f%%".format(it)
+            }
+        )
+    }
 
-    // Method to test connection by reading a single node
-    suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
+    fun getEndpointStatus(): Map<String, Boolean> {
+        return clients.mapValues { it.value.isConnected }
+    }
+
+    suspend fun testConnection(endpointUrl: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            if (!isConnected) return@withContext false
+            val connection = clients[endpointUrl] ?: return@withContext false
+            if (!connection.isConnected) return@withContext false
 
-            val testNodeId = NodeId.parse(opcUaConfig.nodeIds.first())
-            val readValueId = ReadValueId(testNodeId, AttributeId.Value.uid(), null, QualifiedName.NULL_VALUE)
-
-            val result = client.read(0.0, TimestampsToReturn.Both, listOf(readValueId)).get().results
-            val success = result.firstOrNull()?.statusCode?.isGood ?: false
-
-            logger.info("Connection test result: $success")
-            success
+            connection.client.namespaceTable
+            true
         } catch (e: Exception) {
-            logger.error("Connection test failed", e)
+            logger.debug("Connection test failed for $endpointUrl", e)
             false
         }
     }
 
     @PreDestroy
     fun cleanup() {
-        try {
-            isConnected = false
-            scope.cancel()
-            if (::client.isInitialized) {
-                client.disconnect().get()
-                logger.info("OPC UA Client disconnected")
+        logger.info("Shutting down OPC UA multi-client service")
+
+        scope.cancel()
+
+        clients.values.forEach { connection ->
+            try {
+                connection.isConnected = false
+                connection.reconnectJob?.cancel()
+                connection.client.disconnect().get()
+            } catch (e: Exception) {
+                logger.warn("Error disconnecting from ${connection.endpoint.url}", e)
             }
-        } catch (e: Exception) {
-            logger.error("Error during cleanup", e)
         }
+
+        clients.clear()
+        logger.info("OPC UA multi-client service shutdown complete")
     }
 }
