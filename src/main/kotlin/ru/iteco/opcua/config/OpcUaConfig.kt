@@ -3,7 +3,6 @@ package ru.iteco.opcua.config
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.stereotype.Component
 import ru.iteco.opcua.model.MeterType
-import java.util.*
 
 @Component
 @ConfigurationProperties(prefix = "opcua")
@@ -19,7 +18,7 @@ class Endpoint {
 }
 
 class Meter {
-    lateinit var guid: UUID
+    lateinit var guid: String
     lateinit var type: MeterType
     var subs: List<Int> = emptyList()
 }

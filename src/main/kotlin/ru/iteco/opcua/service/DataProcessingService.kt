@@ -17,25 +17,25 @@ import ru.iteco.opcua.repository.RawMeterDataRepository
 class DataProcessingService(
     private val rawMeterDataRepository: RawMeterDataRepository,
     private val meterTimeSeriesRepository: MeterTimeSeriesRepository,
-    private val dataTransformationService: DataTransformationService,
     private val kafkaTemplate: KafkaTemplate<String, String>,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val enricher: MeasurementEnricher
 ) {
     private val logger = LoggerFactory.getLogger(DataProcessingService::class.java)
     private val kafkaTopic = "meter-readings"
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /**
-     * Processes raw meter data by saving it to MongoDB, transforming and saving to PostgreSQL,
-     * and transforming and sending to Kafka, all concurrently.
-     * @param rawData The raw meter data received from OPC UA.
-     */
+
+    @Deprecated("Use processEnrichedMeasurement instead")
     suspend fun processData(rawData: RawMeterData) {
         // Process in three parallel coroutines
         coroutineScope {
             // Launch all three operations concurrently
-            val mongoDeferred = async { saveToMongo(rawData) }
+            val mongoDeferred = async {
+                val enrichedForMongo = enricher.enrichForMongo(rawData)
+                saveToMongo(enrichedForMongo)
+            }
             val postgresDeferred = async { transformAndSaveToPostgres(rawData) }
             val kafkaDeferred = async { transformAndSendToKafka(rawData) }
 
@@ -71,12 +71,6 @@ class DataProcessingService(
         }
     }
 
-    /**
-     * Alternative fire-and-forget version if you don't need to wait for completion of all steps
-     * within the `processData` call itself. This is less strict about error propagation
-     * back to the caller of `processDataAsync`.
-     * @param rawData The raw meter data received from OPC UA.
-     */
     fun processDataAsync(rawData: RawMeterData) {
         // Launch all three operations independently without waiting for their completion within this function
         ioScope.launch {
@@ -118,16 +112,10 @@ class DataProcessingService(
         return rawMeterDataRepository.save(rawData).awaitSingle()
     }
 
-    /**
-     * Transforms raw data into time series data and saves it to PostgreSQL.
-     * Assumes `dataTransformationService.transformToTimeSeries` performs the necessary CPU-bound transformation.
-     * @param rawData The raw meter data to transform.
-     * @return The saved MeterTimeSeries object, or null if transformation yields no data.
-     */
     private suspend fun transformAndSaveToPostgres(rawData: RawMeterData):  MeterTimeSeries? {
         return withContext(Dispatchers.Default) {
             // Transform on Default dispatcher (CPU-bound work)
-            dataTransformationService.transformToTimeSeries(rawData)
+            enricher.enrichForTimescale(rawData)
         }?.let { timeSeries ->
             // Save on IO dispatcher (database operation)
             withContext(Dispatchers.IO) {
@@ -144,7 +132,7 @@ class DataProcessingService(
     private suspend fun transformAndSendToKafka(rawData: RawMeterData) {
         val kafkaMessage = withContext(Dispatchers.Default) {
             // Transform on Default dispatcher (CPU-bound work)
-            dataTransformationService.transformToKafkaMessage(rawData)
+            enricher.enrichForKafka(rawData)
         }
 
         kafkaMessage?.let { message ->

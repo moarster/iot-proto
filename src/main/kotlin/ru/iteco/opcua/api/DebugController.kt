@@ -3,7 +3,6 @@ package ru.iteco.opcua.api
 
 import org.springframework.web.bind.annotation.*
 import ru.iteco.opcua.client.OpcUaConnectionManager
-import ru.iteco.opcua.client.OpcUaDataCollector
 import ru.iteco.opcua.config.OpcUaConfig
 
 @RestController
@@ -26,7 +25,6 @@ class DebugController(
             "endpoints" to opcUaConfig.endpoints.map { endpoint ->
                 mapOf(
                     "url" to endpoint.url,
-                    "type" to endpoint.type,
                     "connected" to (endpointStatus[endpoint.url] ?: false),
                     "meterCount" to endpoint.meters.size,
                     "totalSubscriptions" to endpoint.meters.sumOf { it.subs.size }
@@ -74,7 +72,6 @@ class DebugController(
             "endpointUrl" to decodedUrl,
             "testPassed" to testResult,
             "endpointFound" to (endpoint != null),
-            "endpointType" to (endpoint?.type ?: "unknown"),
             "meterCount" to (endpoint?.meters?.size ?: 0),
             "timestamp" to System.currentTimeMillis()
         )
@@ -83,27 +80,9 @@ class DebugController(
     @GetMapping("/stats")
     suspend fun getDetailedStats(): Map<String, Any> {
         val connectionStats = connectionManager.getConnectionStats()
-        val endpointStatus = connectionManager.getEndpointStatus()
-
-        val typeGroups = opcUaConfig.endpoints.groupBy { it.type }
-        val typeStats = typeGroups.mapValues { (type, endpoints) ->
-            val connectedInType = endpoints.count { endpointStatus[it.url] ?: false }
-            mapOf(
-                "total" to endpoints.size,
-                "connected" to connectedInType,
-                "connectionRate" to if (endpoints.isNotEmpty()) {
-                    "%.1f%%".format(connectedInType.toDouble() / endpoints.size * 100)
-                } else "0.0%",
-                "totalMeters" to endpoints.sumOf { it.meters.size },
-                "totalSubscriptions" to endpoints.sumOf { endpoint ->
-                    endpoint.meters.sumOf { it.subs.size }
-                }
-            )
-        }
 
         return mapOf(
             "overall" to connectionStats,
-            "byType" to typeStats,
             "memoryUsage" to mapOf(
                 "totalMemory" to Runtime.getRuntime().totalMemory(),
                 "freeMemory" to Runtime.getRuntime().freeMemory(),
@@ -120,7 +99,6 @@ class DebugController(
         val endpointDetails = opcUaConfig.endpoints.map { endpoint ->
             mapOf(
                 "url" to endpoint.url,
-                "type" to endpoint.type,
                 "connected" to (endpointStatus[endpoint.url] ?: false),
                 "meters" to endpoint.meters.map { meter ->
                     mapOf(
@@ -147,7 +125,6 @@ class DebugController(
         }.map { endpoint ->
             mapOf(
                 "url" to endpoint.url,
-                "type" to endpoint.type,
                 "meterCount" to endpoint.meters.size,
                 "subscriptionCount" to endpoint.meters.sumOf { it.subs.size }
             )
@@ -169,7 +146,6 @@ class DebugController(
         }.map { endpoint ->
             mapOf(
                 "url" to endpoint.url,
-                "type" to endpoint.type,
                 "meterCount" to endpoint.meters.size,
                 "subscriptionCount" to endpoint.meters.sumOf { it.subs.size }
             )
@@ -178,38 +154,6 @@ class DebugController(
         return mapOf(
             "disconnectedEndpoints" to disconnectedEndpoints,
             "count" to disconnectedEndpoints.size,
-            "timestamp" to System.currentTimeMillis()
-        )
-    }
-
-    @GetMapping("/types")
-    suspend fun getEndpointTypes(): Map<String, Any> {
-        val endpointStatus = connectionManager.getEndpointStatus()
-        val typeGroups = opcUaConfig.endpoints.groupBy { it.type }
-
-        val typeDetails = typeGroups.map { (type, endpoints) ->
-            val connectedCount = endpoints.count { endpointStatus[it.url] ?: false }
-            val totalMeters = endpoints.sumOf { it.meters.size }
-            val totalSubs = endpoints.sumOf { endpoint -> endpoint.meters.sumOf { it.subs.size } }
-
-            mapOf(
-                "type" to type,
-                "endpointCount" to endpoints.size,
-                "connectedCount" to connectedCount,
-                "connectionRate" to "%.1f%%".format(
-                    if (endpoints.isNotEmpty()) connectedCount.toDouble() / endpoints.size * 100 else 0.0
-                ),
-                "totalMeters" to totalMeters,
-                "totalSubscriptions" to totalSubs,
-                "avgMetersPerEndpoint" to if (endpoints.isNotEmpty()) {
-                    "%.1f".format(totalMeters.toDouble() / endpoints.size)
-                } else "0.0"
-            )
-        }
-
-        return mapOf(
-            "types" to typeDetails,
-            "totalTypes" to typeDetails.size,
             "timestamp" to System.currentTimeMillis()
         )
     }

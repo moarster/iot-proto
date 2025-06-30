@@ -4,8 +4,8 @@ import com.fasterxml.jackson.annotation.JsonFormat
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
 import org.springframework.data.relational.core.mapping.Table
+import ru.iteco.opcua.metadata.Metadata
 import java.time.LocalDateTime
-import java.util.UUID
 
 /**
  * Raw data model for MongoDB storage.
@@ -26,16 +26,16 @@ import java.util.UUID
 data class RawMeterData(
     @Id
     val id: String? = null,
-    val uspdId: String,
+    val uspdId: String?,
     val meterId: String? = null, // Уровень счетчика
-    val subsystem: Int = null, // Уровень логического узла
+    val subsystem: String? = null, // Уровень логического узла
     val resourceType: MeterType? = MeterType.HEAT,
     val isMeasurement: Boolean = false,
     val nodeId: String,
     val endpointUrl: String,
     val value: Any,
     val dataType: String,
-    val unit: String,
+    val unit: String? = null,
     val quality: String,
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     val timestamp: LocalDateTime,
@@ -61,16 +61,16 @@ data class RawMeterData(
 data class MeterTimeSeries(
     @Id
     val id: Long? = null,
-    val uspdId: UUID,
-    val meterId: UUID,
-    val subsystem: Integer,
-    val resourceType: MeterType,
+    val uspdId: String?,
+    val meterId: String?,
+    val subsystem: String?,
+    val resourceType: MeterType?,
     val nodeId: String,
     val value: Double,
-    val unit: String,
+    val unit: String? =null,
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     val timestamp: LocalDateTime,
-    val serverTimestamp: LocalDateTime,
+    val serverTimestamp: LocalDateTime?,
 )
 
 //
@@ -89,19 +89,24 @@ data class KafkaMeterMessage(
     val deviceId: String,
     val sensorType: String,
     val measurement: Double,
-    val unit: String,
+    val unit: String?=null,
+    val property: String, // Property name
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
     val recordedAt: LocalDateTime,
-    val metadata: Map<String, Any> = emptyMap()
+    val metadata: Metadata = Metadata()
 )
 
 enum class MeterType{
-    GVS,HVS,HEAT
+    GVS,HVS,HEAT;
+    companion object {
+        fun fromString(input: String): MeterType? {
+            val upper = input.uppercase()
+            return when {
+                "ГВС" in upper -> GVS
+                "ХВС" in upper -> HVS
+                "ЦО" in upper  -> HEAT
+                else -> null
+            }
+        }
+    }
 }
-
-data class NodeMetadata(
-    val value: Any,
-    val dataType: String,
-    val timestamp: LocalDateTime,
-    val serverTimestamp: LocalDateTime?
-)

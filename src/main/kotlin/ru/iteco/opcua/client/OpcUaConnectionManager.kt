@@ -1,20 +1,14 @@
 package ru.iteco.opcua.client
 
 import jakarta.annotation.PreDestroy
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder
 import org.eclipse.milo.opcua.stack.client.DiscoveryClient
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
+import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte
 import org.eclipse.milo.opcua.stack.core.types.enumerated.ApplicationType
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
 import org.eclipse.milo.opcua.stack.core.types.structured.ApplicationDescription
@@ -23,14 +17,14 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import ru.iteco.opcua.config.Endpoint
 import ru.iteco.opcua.config.OpcUaConfig
+import ru.iteco.opcua.metadata.MetadataPreloader
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte
-import kotlin.text.get
 
 @Component
 class OpcUaConnectionManager(
-    private val opcUaConfig: OpcUaConfig
+    private val opcUaConfig: OpcUaConfig,
+    private val metadataPreloader: MetadataPreloader
 ) {
     private val logger = LoggerFactory.getLogger(OpcUaConnectionManager::class.java)
 
@@ -85,6 +79,9 @@ class OpcUaConnectionManager(
                 connectedCount.incrementAndGet()
 
                 logger.info("Подключено к $endpoint (${connectedCount.get()} из ${totalEndpoints.get()})")
+
+                //Загрузить метаданные в кэш
+                metadataPreloader.preloadMetadata(connection)
 
             } catch (e: Exception) {
                 logger.error("Ошибка подключения к ${endpoint}: ${e.message}")
