@@ -3,7 +3,6 @@ package ru.iteco.opcua.service
 import org.springframework.stereotype.Service
 import ru.iteco.opcua.model.KafkaMeterMessage
 import ru.iteco.opcua.model.MeterTimeSeries
-import ru.iteco.opcua.model.MeterType
 import ru.iteco.opcua.model.RawMeterData
 
 @Service

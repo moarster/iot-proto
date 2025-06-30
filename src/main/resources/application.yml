@@ -7,6 +7,10 @@ spring:
       port: 27017
       database: meter_data
       collection: meter_readings
+    redis:
+      host: localhost
+      port: 6379
+      password:
   r2dbc:
     url: r2dbc:postgresql://localhost:5432/timeseries_db
     username: postgres
@@ -26,11 +30,12 @@ spring:
 opcua:
   endpoints:
     - url: "opc.tcp://172.16.10.237:4841"
-      type: heat
       meters:
         - guid: 3e97ec0a-3ad8-4ce8-be06-056e3f19861b
+          type: heat
           subs: [1]
         - guid: 59e39388-c93b-4ab6-87d8-eaf608624fa4
+          type: heat
           subs: [1]
   application-name: "Spring Boot OPC UA Meter Client"
   subscription-interval: 5000

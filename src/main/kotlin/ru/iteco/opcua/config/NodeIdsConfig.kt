@@ -9,35 +9,33 @@ import org.springframework.context.annotation.Configuration
 @Configuration
 class NodeIdsConfig {
 
-    val guisController: MutableList<String> = mutableListOf()
+    val uspd: MutableList<String> = mutableListOf()
     val meter: MutableList<String> = mutableListOf()
     val sub: MutableList<String> = mutableListOf()
+    val current: MutableList<String> = mutableListOf()
+    val history: MutableList<String> = mutableListOf()
     val kotlinModule = KotlinModule.Builder().build()
 
     @PostConstruct
     fun init() {
         val mapper = ObjectMapper(YAMLFactory()).registerModule(kotlinModule)
-        val resource = javaClass.getResourceAsStream("/nodes.yml")
+        val resource = javaClass.getResourceAsStream("/node-eds.yml")
         val root = mapper.readTree(resource)
 
-        root["properties"].first().get("properties")?.fieldNames()?.forEachRemaining {
-            guisController.add(it)
+        root["controller"]?.fieldNames()?.forEachRemaining {
+            uspd.add(it)
         }
-
-        root["properties"].first().get("patternProperties").first()
-            .get("properties")?.fieldNames()?.forEachRemaining {
-                meter.add(it)
-            }
-
-         root["properties"].first().get("patternProperties").first()
-            .get("patternProperties").first().get("properties").properties().forEach { subHigh ->
-                sub.add(subHigh.key)
-                if (subHigh.value.get("type").equals("object")) {
-                    subHigh.value.get("properties").properties().forEach {
-                        sub.add(subHigh.key+"."+it.key)
-                    }
-                }
-            }
-
+        root["meter"]?.fieldNames()?.forEachRemaining {
+            meter.add(it)
+        }
+        root["sub"]?.fieldNames()?.forEachRemaining {
+            sub.add(it)
+        }
+        root["current"]?.fieldNames()?.forEachRemaining {
+            current.add(it)
+        }
+        root["history"]?.fieldNames()?.forEachRemaining {
+            history.add(it)
+        }
     }
 }

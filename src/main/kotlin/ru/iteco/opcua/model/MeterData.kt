@@ -5,6 +5,7 @@ import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
 import org.springframework.data.relational.core.mapping.Table
 import java.time.LocalDateTime
+import java.util.UUID
 
 /**
  * Raw data model for MongoDB storage.
@@ -25,14 +26,22 @@ import java.time.LocalDateTime
 data class RawMeterData(
     @Id
     val id: String? = null,
+    val uspdId: String,
+    val meterId: String? = null, // Уровень счетчика
+    val subsystem: Int = null, // Уровень логического узла
+    val resourceType: MeterType? = MeterType.HEAT,
+    val isMeasurement: Boolean = false,
     val nodeId: String,
     val endpointUrl: String,
     val value: Any,
     val dataType: String,
+    val unit: String,
     val quality: String,
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     val timestamp: LocalDateTime,
-    val serverTimestamp: LocalDateTime? = null
+    val serverTimestamp: LocalDateTime? = null,
+    val periodStart: LocalDateTime? = null,
+    val periodEnd: LocalDateTime? = null,
 )
 
 /**
@@ -43,7 +52,7 @@ data class RawMeterData(
  *
  * @property id Unique identifier for the time series record (auto-generated)
  * @property meterId Identifier for the specific meter (extracted from NodeId parsing)
- * @property meterType The specific type of measurement (e.g., GVS_TEMP_SUPPLY)
+ * @property resourceType The specific type of measurement (e.g., GVS_TEMP_SUPPLY)
  * @property value The measured value, converted to Double for consistent processing
  * @property unit Unit of measurement (e.g., "°C", "м3/ч", "Гкал")
  * @property timestamp The exact timestamp when the measurement was taken
@@ -52,12 +61,16 @@ data class RawMeterData(
 data class MeterTimeSeries(
     @Id
     val id: Long? = null,
-    val meterId: String,
-    val meterType: MeterType,
+    val uspdId: UUID,
+    val meterId: UUID,
+    val subsystem: Integer,
+    val resourceType: MeterType,
+    val nodeId: String,
     val value: Double,
     val unit: String,
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    val timestamp: LocalDateTime
+    val timestamp: LocalDateTime,
+    val serverTimestamp: LocalDateTime,
 )
 
 //
@@ -77,8 +90,18 @@ data class KafkaMeterMessage(
     val sensorType: String,
     val measurement: Double,
     val unit: String,
-    val location: String,
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
     val recordedAt: LocalDateTime,
     val metadata: Map<String, Any> = emptyMap()
+)
+
+enum class MeterType{
+    GVS,HVS,HEAT
+}
+
+data class NodeMetadata(
+    val value: Any,
+    val dataType: String,
+    val timestamp: LocalDateTime,
+    val serverTimestamp: LocalDateTime?
 )

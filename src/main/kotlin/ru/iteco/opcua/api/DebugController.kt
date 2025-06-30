@@ -2,20 +2,21 @@ package ru.iteco.opcua.api
 
 
 import org.springframework.web.bind.annotation.*
-import ru.iteco.opcua.client.OpcUaClientService
+import ru.iteco.opcua.client.OpcUaConnectionManager
+import ru.iteco.opcua.client.OpcUaDataCollector
 import ru.iteco.opcua.config.OpcUaConfig
 
 @RestController
 @RequestMapping("/debug")
 class DebugController(
-    private val opcUaClientService: OpcUaClientService,
+    private val connectionManager: OpcUaConnectionManager,
     private val opcUaConfig: OpcUaConfig
 ) {
 
     @GetMapping("/connection")
     suspend fun checkConnection(): Map<String, Any> {
-        val stats = opcUaClientService.getConnectionStats()
-        val endpointStatus = opcUaClientService.getEndpointStatus()
+        val stats = connectionManager.getConnectionStats()
+        val endpointStatus = connectionManager.getEndpointStatus()
 
         return mapOf(
             "summary" to stats,
@@ -40,7 +41,7 @@ class DebugController(
         val testResults = mutableListOf<Map<String, Any>>()
 
         opcUaConfig.endpoints.forEach { endpoint ->
-            val testResult = opcUaClientService.testConnection(endpoint.url)
+            val testResult = connectionManager.testConnection(endpoint.url)
             testResults.add(mapOf(
                 "endpointUrl" to endpoint.url,
                 "testPassed" to testResult,
@@ -65,7 +66,7 @@ class DebugController(
     @GetMapping("/test/{endpointUrl}")
     suspend fun testSpecificConnection(@PathVariable endpointUrl: String): Map<String, Any> {
         val decodedUrl = java.net.URLDecoder.decode(endpointUrl, "UTF-8")
-        val testResult = opcUaClientService.testConnection(decodedUrl)
+        val testResult = connectionManager.testConnection(decodedUrl)
 
         val endpoint = opcUaConfig.endpoints.find { it.url == decodedUrl }
 
@@ -81,8 +82,8 @@ class DebugController(
 
     @GetMapping("/stats")
     suspend fun getDetailedStats(): Map<String, Any> {
-        val connectionStats = opcUaClientService.getConnectionStats()
-        val endpointStatus = opcUaClientService.getEndpointStatus()
+        val connectionStats = connectionManager.getConnectionStats()
+        val endpointStatus = connectionManager.getEndpointStatus()
 
         val typeGroups = opcUaConfig.endpoints.groupBy { it.type }
         val typeStats = typeGroups.mapValues { (type, endpoints) ->
@@ -114,7 +115,7 @@ class DebugController(
 
     @GetMapping("/endpoints")
     suspend fun getAllEndpoints(): Map<String, Any> {
-        val endpointStatus = opcUaClientService.getEndpointStatus()
+        val endpointStatus = connectionManager.getEndpointStatus()
 
         val endpointDetails = opcUaConfig.endpoints.map { endpoint ->
             mapOf(
@@ -139,7 +140,7 @@ class DebugController(
 
     @GetMapping("/endpoints/connected")
     suspend fun getConnectedEndpoints(): Map<String, Any> {
-        val endpointStatus = opcUaClientService.getEndpointStatus()
+        val endpointStatus = connectionManager.getEndpointStatus()
 
         val connectedEndpoints = opcUaConfig.endpoints.filter {
             endpointStatus[it.url] ?: false
@@ -161,7 +162,7 @@ class DebugController(
 
     @GetMapping("/endpoints/disconnected")
     suspend fun getDisconnectedEndpoints(): Map<String, Any> {
-        val endpointStatus = opcUaClientService.getEndpointStatus()
+        val endpointStatus = connectionManager.getEndpointStatus()
 
         val disconnectedEndpoints = opcUaConfig.endpoints.filter {
             !(endpointStatus[it.url] ?: false)
@@ -183,7 +184,7 @@ class DebugController(
 
     @GetMapping("/types")
     suspend fun getEndpointTypes(): Map<String, Any> {
-        val endpointStatus = opcUaClientService.getEndpointStatus()
+        val endpointStatus = connectionManager.getEndpointStatus()
         val typeGroups = opcUaConfig.endpoints.groupBy { it.type }
 
         val typeDetails = typeGroups.map { (type, endpoints) ->
@@ -223,7 +224,7 @@ class DebugController(
             mapOf(
                 "endpointUrl" to decodedUrl,
                 "reconnectTriggered" to true,
-                "currentStatus" to opcUaClientService.testConnection(decodedUrl) as Any,
+                "currentStatus" to connectionManager.testConnection(decodedUrl) as Any,
                 "message" to "Reconnect request processed",
                 "timestamp" to System.currentTimeMillis()
             )
@@ -239,7 +240,7 @@ class DebugController(
 
     @GetMapping("/health")
     suspend fun healthCheck(): Map<String, Any> {
-        val stats = opcUaClientService.getConnectionStats()
+        val stats = connectionManager.getConnectionStats()
         val connected = stats["connected"] as Int
         val total = stats["total"] as Int
 

@@ -11,11 +11,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
-import ru.iteco.opcua.client.OpcUaClientService
+import ru.iteco.opcua.client.OpcUaDataCollector
 
 @Service
 class DataCollectionOrchestrator(
-    private val opcUaClientService: OpcUaClientService,
+    private val opcUaDataCollector: OpcUaDataCollector,
     private val dataProcessingService: DataProcessingService
 ) {
     private val logger = LoggerFactory.getLogger(DataCollectionOrchestrator::class.java)
@@ -28,11 +28,11 @@ class DataCollectionOrchestrator(
         // Initialize the OPC UA client first to establish connection and subscriptions
         GlobalScope.launch { // Use GlobalScope.launch for the suspend function call
             try {
-                opcUaClientService.initialize()
+                opcUaDataCollector.initialize()
                 logger.info("OPC UA Client initialized successfully.")
 
                 // Once initialized, start collecting data from the stream
-                opcUaClientService.getDataStream()
+                opcUaDataCollector.getDataStream()
                     .onEach { rawData ->
                         logger.debug("Received data from OPC UA: {}. Value: {}", rawData.nodeId, rawData.value)
                         // Process the raw data in parallel operations (Mongo, PostgreSQL, Kafka)
