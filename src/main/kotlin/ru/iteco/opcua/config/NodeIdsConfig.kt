@@ -19,7 +19,7 @@ class NodeIdsConfig {
     @PostConstruct
     fun init() {
         val mapper = ObjectMapper(YAMLFactory()).registerModule(kotlinModule)
-        val resource = javaClass.getResourceAsStream("/node-eds.yml")
+        val resource = javaClass.getResourceAsStream("/node-ids.yml")
         val root = mapper.readTree(resource)
 
         root["controller"]?.fieldNames()?.forEachRemaining {
