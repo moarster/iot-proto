@@ -170,21 +170,20 @@ class OpcUaDataCollector(
         value: DataValue,
         classification: NodeClassification
     ) {
-        // TODO: 1. Получить необходимые метаданные из кэша (быстро)
-        // TODO: 2. Создать RawMeterData с полным контекстом
-        // TODO: 3. Отправить в канал измерений
-        // Получаем метаданные из кэша (БЫСТРО!)
-        val metadata = metadataService.getMeasurementMetadata(connection.endpoint.url,classification)
+        // UNDO: 1. Получить необходимые метаданные из кэша (быстро)
+        // UNDO: 2. Создать RawMeterData с полным контекстом
+        // DONE: 3. Отправить в канал измерений
+        // TODO: Перенести разрешение метаданных в DataEnrichmentService
+        //val metadata = metadataService.getMeasurementMetadata(connection.endpoint.url,classification)
 
-        // Создаем RawMeterData с полным контекстом
         val rawData = RawMeterData(
             nodeId = nodeId,
             endpointUrl = connection.endpoint.url,
             value = value.value?.value ?: "null",
-            uspdId = metadata.uspdId,
+            //uspdId = metadata.uspdId,
             meterId = classification.meterId,
             subsystem = classification.subsystem,
-            resourceType = metadata.resourceType,
+            //resourceType = metadata.resourceType,
             isMeasurement = classification.isMeasurement,
             dataType = value.value?.dataType?.toString() ?: "unknown",
             quality = when {
@@ -201,6 +200,7 @@ class OpcUaDataCollector(
         measurementChannel.send(rawData)  // ← В канал!
     }
 
+    //TODO: Разобраться с требованиями к передаче метаданных
     private suspend fun handleMetadataChange(
         connection: OpcUaConnectionManager.ClientConnection,
         nodeId: String,
@@ -218,7 +218,7 @@ class OpcUaDataCollector(
         )
         metadataService.cacheMetadata(connection.endpoint.url, nodeId, metadata)
 
-        // TODO: Не все отправлять, а только критичные
+        // TODO: Не все отправлять в канал, а только критичные
         if (true) {
             val update = MetadataUpdate(connection.endpoint.url, nodeId, metadata, MetadataUpdateType.CONFIGURATION_CHANGED)
             metadataUpdateChannel.send(update)
@@ -226,7 +226,7 @@ class OpcUaDataCollector(
     }
 
 
-
+    //TODO: Разобраться с реальностью УСПД: поллинг нужен только для переопросов или есть сервера не поддерживающих подписку
     private fun startPolling(connection: OpcUaConnectionManager.ClientConnection) {
         scope.launch {
             while (connection.isConnected) {
@@ -246,7 +246,7 @@ class OpcUaDataCollector(
             try {
                 val measurementNodes = buildMeasurementNodeIds(connection.endpoint)
                 if (measurementNodes.isEmpty()) {
-                    logger.warn("No measurement nodes configured for ${connection.endpoint}")
+                    logger.warn("Не настроена схема измерений для ${connection.endpoint}")
                     return@withContext
                 }
 
@@ -265,13 +265,14 @@ class OpcUaDataCollector(
                 }
 
             } catch (e: Exception) {
-                logger.error("Polling failed for ${connection.endpoint}", e)
+                logger.error("Ошибка опроса ${connection.endpoint}", e)
                 throw e
             }
         }
 
     /**
-     * Builds only measurement node IDs (Current.* and History.*)
+     * Создает список nodeId для измерений
+     * TODO: пожалуй надо перенести в конфиг
      */
     private fun buildMeasurementNodeIds(endpoint: Endpoint): List<String> {
         val nodeIds = mutableListOf<String>()
@@ -294,8 +295,10 @@ class OpcUaDataCollector(
         return nodeIds
     }
 
-    // Публичные API
-    fun getMetadataUpdateStream(): Flow<MetadataUpdate> = metadataUpdateChannel.receiveAsFlow()
     fun getDataStream(): Flow<RawMeterData> = measurementChannel.receiveAsFlow()
+
+
+        //TODO: Пока метаданные сами по себе хранятся только в Redis, это не используется
+    fun getMetadataUpdateStream(): Flow<MetadataUpdate> = metadataUpdateChannel.receiveAsFlow()
 
 }

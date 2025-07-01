@@ -1,7 +1,12 @@
 package ru.iteco.opcua.service
 
+import jakarta.annotation.PreDestroy
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -16,38 +21,44 @@ import ru.iteco.opcua.client.OpcUaDataCollector
 @Service
 class DataCollectionOrchestrator(
     private val opcUaDataCollector: OpcUaDataCollector,
-    private val dataProcessingService: DataProcessingService
+    private val meterDataOrchestrationService: MeterDataOrchestrationService
 ) {
     private val logger = LoggerFactory.getLogger(DataCollectionOrchestrator::class.java)
+
+    private val collectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @OptIn(DelicateCoroutinesApi::class)
     @EventListener(ApplicationReadyEvent::class)
     fun startDataCollection() {
-        logger.info("Starting OPC UA data collection...")
+        logger.info("Запускаем сбор данных из OPC UA...")
 
-        // Initialize the OPC UA client first to establish connection and subscriptions
-        GlobalScope.launch { // Use GlobalScope.launch for the suspend function call
+        collectionScope.launch {
             try {
                 opcUaDataCollector.initialize()
-                logger.info("OPC UA Client initialized successfully.")
+                logger.info("Клиент OPC UA успешно инициализирован")
 
-                // Once initialized, start collecting data from the stream
                 opcUaDataCollector.getDataStream()
                     .onEach { rawData ->
-                        logger.debug("Received data from OPC UA: {}. Value: {}", rawData.nodeId, rawData.value)
-                        // Process the raw data in parallel operations (Mongo, PostgreSQL, Kafka)
-                        dataProcessingService.processData(rawData)
+                        logger.debug("Получены данные из OPC UA — узел: {}, значение: {}", rawData.nodeId, rawData.value)
+                        meterDataOrchestrationService.processData(rawData)
                     }
                     .catch { error ->
-                        logger.error("Error in data collection stream", error)
+                        logger.error("Произошла ошибка в потоке сбора данных", error)
                     }
-                    .retry(3) // Retry connection/stream errors 3 times
-                    .launchIn(GlobalScope) // Launch the flow in GlobalScope to keep it running
+                    .retry(3)
+                    .launchIn(collectionScope)
+
             } catch (e: Exception) {
-                logger.error("Failed to start OPC UA data collection due to initialization error", e)
+                logger.error("Не удалось запустить сбор данных из OPC UA", e)
             }
         }
 
-        logger.info("OPC UA data collection orchestrator setup initiated.")
+        logger.info("Настройка сбора данных из OPC UA завершена")
+    }
+
+    @PreDestroy
+    fun cleanup() {
+        logger.info("Выключаем DataCollectionOrchestrator")
+        collectionScope.cancel("Application shutdown")
     }
 }

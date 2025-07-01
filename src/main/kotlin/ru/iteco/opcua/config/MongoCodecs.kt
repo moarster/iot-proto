@@ -11,7 +11,11 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.ULong
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort
 
-// UByte codec
+/**
+ * Кодеки Монго конвертируют специфические OPC UA типы в BSON
+ *
+ */
+
 class UByteCodec : Codec<UByte> {
     override fun encode(writer: BsonWriter, value: UByte, encoderContext: EncoderContext) {
         writer.writeInt32(value.toInt())
@@ -24,7 +28,6 @@ class UByteCodec : Codec<UByte> {
     override fun getEncoderClass(): Class<UByte> = UByte::class.java
 }
 
-// UShort codec
 class UShortCodec : Codec<UShort> {
     override fun encode(writer: BsonWriter, value: UShort, encoderContext: EncoderContext) {
         writer.writeInt32(value.toInt())
@@ -37,7 +40,6 @@ class UShortCodec : Codec<UShort> {
     override fun getEncoderClass(): Class<UShort> = UShort::class.java
 }
 
-// UInteger codec (you probably already have this)
 class UIntegerCodec : Codec<UInteger> {
     override fun encode(writer: BsonWriter, value: UInteger, encoderContext: EncoderContext) {
         writer.writeInt64(value.toLong())
@@ -50,10 +52,9 @@ class UIntegerCodec : Codec<UInteger> {
     override fun getEncoderClass(): Class<UInteger> = UInteger::class.java
 }
 
-// ULong codec
 class ULongCodec : Codec<ULong> {
     override fun encode(writer: BsonWriter, value: ULong, encoderContext: EncoderContext) {
-        // Store as string since BSON doesn't support unsigned 64-bit
+        // Сохраняем как строку, так как BSON не поддерживает беззнаковые 64-битные числа
         writer.writeString(value.toString())
     }
 
@@ -64,7 +65,6 @@ class ULongCodec : Codec<ULong> {
     override fun getEncoderClass(): Class<ULong> = ULong::class.java
 }
 
-// DateTime codec
 class DateTimeCodec : Codec<DateTime> {
     override fun encode(writer: BsonWriter, value: DateTime, encoderContext: EncoderContext) {
         writer.writeDateTime(value.javaTime)
@@ -77,7 +77,7 @@ class DateTimeCodec : Codec<DateTime> {
     override fun getEncoderClass(): Class<DateTime> = DateTime::class.java
 }
 
-// NodeId codec
+
 class NodeIdCodec : Codec<NodeId> {
     override fun encode(writer: BsonWriter, value: NodeId, encoderContext: EncoderContext) {
         writer.writeStartDocument()
@@ -115,7 +115,7 @@ class NodeIdCodec : Codec<NodeId> {
     override fun getEncoderClass(): Class<NodeId> = NodeId::class.java
 }
 
-// ExpandedNodeId codec
+
 class ExpandedNodeIdCodec : Codec<ExpandedNodeId> {
     override fun encode(writer: BsonWriter, value: ExpandedNodeId, encoderContext: EncoderContext) {
         writer.writeStartDocument()
@@ -142,7 +142,6 @@ class ExpandedNodeIdCodec : Codec<ExpandedNodeId> {
     override fun getEncoderClass(): Class<ExpandedNodeId> = ExpandedNodeId::class.java
 }
 
-// QualifiedName codec
 class QualifiedNameCodec : Codec<QualifiedName> {
     override fun encode(writer: BsonWriter, value: QualifiedName, encoderContext: EncoderContext) {
         writer.writeStartDocument()
@@ -162,7 +161,7 @@ class QualifiedNameCodec : Codec<QualifiedName> {
     override fun getEncoderClass(): Class<QualifiedName> = QualifiedName::class.java
 }
 
-// LocalizedText codec
+
 class LocalizedTextCodec : Codec<LocalizedText> {
     override fun encode(writer: BsonWriter, value: LocalizedText, encoderContext: EncoderContext) {
         writer.writeStartDocument()
@@ -182,7 +181,7 @@ class LocalizedTextCodec : Codec<LocalizedText> {
     override fun getEncoderClass(): Class<LocalizedText> = LocalizedText::class.java
 }
 
-// ByteString codec
+
 class ByteStringCodec : Codec<ByteString> {
     override fun encode(writer: BsonWriter, value: ByteString, encoderContext: EncoderContext) {
         writer.writeBinaryData(org.bson.BsonBinary(value.bytes()))
@@ -195,7 +194,7 @@ class ByteStringCodec : Codec<ByteString> {
     override fun getEncoderClass(): Class<ByteString> = ByteString::class.java
 }
 
-// XmlElement codec
+
 class XmlElementCodec : Codec<XmlElement> {
     override fun encode(writer: BsonWriter, value: XmlElement, encoderContext: EncoderContext) {
         writer.writeString(value.fragment)
@@ -208,7 +207,13 @@ class XmlElementCodec : Codec<XmlElement> {
     override fun getEncoderClass(): Class<XmlElement> = XmlElement::class.java
 }
 
-// Variant codec - this one's tricky because it can contain any type
+/**
+ * Variant может содержать значение любого типа, так что тут немного треш —
+ * сериализуем тип отдельно как строку (`dataType`), а само значение —
+ * по ситуации: от строк и чисел до бинарных данных.
+ *
+ * Поддержка типов ограничена — только самые базовые, остальное через `.toString()` или руками.
+ */
 class VariantCodec : Codec<Variant> {
     override fun encode(writer: BsonWriter, value: Variant, encoderContext: EncoderContext) {
         writer.writeStartDocument()

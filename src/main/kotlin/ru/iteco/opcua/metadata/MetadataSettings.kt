@@ -6,9 +6,9 @@ import java.time.LocalDateTime
  * Стратегия кэширования для разных типов метаданных
  */
 enum class MetadataCacheStrategy(val ttlHours: Long, val refreshStrategy: RefreshStrategy) {
-    CONTROLLER_STATIC(24 * 7, RefreshStrategy.ON_CONNECT), // Статические данные контроллера - раз в неделю
-    METER_STATIC(24, RefreshStrategy.ON_CONNECT),           // Статические данные счетчика - раз в день
-    METER_DYNAMIC(1, RefreshStrategy.ON_CHANGE),           // Динамические данные (статус подключения) - по изменению
+    CONTROLLER_STATIC(24 * 7, RefreshStrategy.ON_CONNECT),           // Статические данные контроллера - раз в неделю
+    METER_STATIC(24, RefreshStrategy.ON_CONNECT),          // Статические данные счетчика - раз в день
+    METER_DYNAMIC(1, RefreshStrategy.ON_CHANGE),           // Динамические данные счетчика (статус подключения) - по изменению
     SUBSYSTEM_STATIC(24, RefreshStrategy.ON_CONNECT)       // Данные подсистемы - раз в день
 }
 

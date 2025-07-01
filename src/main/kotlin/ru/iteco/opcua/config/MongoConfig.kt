@@ -15,7 +15,7 @@ class MongoConfig {
             PojoCodecProvider.builder().automatic(true).build()
         )
 
-        // Register all OPC UA codecs
+        // Регистрируем OPC UA кодеки
         val opcUaCodecRegistry = CodecRegistries.fromCodecs(
             UByteCodec(),
             UShortCodec(),

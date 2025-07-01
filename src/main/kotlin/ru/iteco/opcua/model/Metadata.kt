@@ -1,13 +1,14 @@
-package ru.iteco.opcua.metadata
+package ru.iteco.opcua.model
 
-import ru.iteco.opcua.model.MeterType
+import ru.iteco.opcua.metadata.NodeClassification
 
+//TODO: Это вероятно сделать конфигом
 data class Metadata (
     var uspdId: String?=null,
     var resourceType: MeterType?=null,
 ){
 
-
+    //TODO: эффективно статический метод
     companion object {
         var basePrefix = "ns=2;s=GIUSController."
         fun getMetadataNodesFor(node: NodeClassification): Map<String, String> {

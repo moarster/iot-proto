@@ -33,7 +33,7 @@ class OpcUaConnectionManager(
     private val connectionSemaphore = Semaphore(maxConcurrentConnections)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Connection stats
+    // Для статистики
     private val connectedCount = AtomicInteger(0)
     private val totalEndpoints = AtomicInteger(0)
 
@@ -54,12 +54,12 @@ class OpcUaConnectionManager(
             return
         }
 
-        // Connect in batches to avoid overwhelming the network
+        // Подключение пачками для уменьшения нагрузки на сеть
         opcUaConfig.endpoints.chunked(10).forEach { batch ->
             batch.forEach { endpoint ->
                 scope.launch { connectToEndpoint(endpoint) }
             }
-            delay(1000) // Pause between batches
+            delay(1000) // Пауза между батчами
         }
 
         startConnectionMonitor()
@@ -98,7 +98,7 @@ class OpcUaConnectionManager(
             createFallbackEndpoint(serverEndpoint)
         }
 
-        // Rewrite endpoint URLs to use IP instead of hostname
+        // Вернем обратно IP вместо hostname
         val rewrittenEndpoints = dataEndpoints.map { original ->
             EndpointDescription(
                 serverEndpoint,
@@ -112,11 +112,11 @@ class OpcUaConnectionManager(
             )
         }
 
-        // Select endpoint without security
+        // Выберем небезопасную точку
         val selectedEndpoint = rewrittenEndpoints.find {
             it.securityMode == MessageSecurityMode.None
         } ?: rewrittenEndpoints.firstOrNull()
-        ?: throw IllegalStateException("No suitable endpoint found for $serverEndpoint")
+        ?: throw IllegalStateException("Не настроен доступ к $serverEndpoint без авторизации")
 
         val config = OpcUaClientConfigBuilder()
             .setApplicationName(LocalizedText(opcUaConfig.applicationName))
@@ -134,6 +134,7 @@ class OpcUaConnectionManager(
             EndpointDescription(
                 url,
                 ApplicationDescription(
+
                     "urn:fallback:opcua:server",
                     "urn:fallback:opcua:server:product",
                     LocalizedText("en", "Fallback OPC UA Server"),
@@ -166,14 +167,14 @@ class OpcUaConnectionManager(
             }
 
             connection.lastReconnectAttempt = System.currentTimeMillis()
-            logger.info("Attempting reconnect to $endpointUrl")
+            logger.info("Попытка повторного подключения к $endpointUrl")
 
             try {
                 connection.client.disconnect()
                 connectedCount.decrementAndGet()
                 connectToEndpoint(connection.endpoint)
             } catch (e: Exception) {
-                logger.error("Reconnect failed for $endpointUrl", e)
+                logger.error("Повторное подключение к $endpointUrl не удалось", e)
                 delay(60000)
                 scheduleReconnect(endpointUrl)
             }
@@ -187,16 +188,16 @@ class OpcUaConnectionManager(
 
                 val connected = connectedCount.get()
                 val total = totalEndpoints.get()
-                logger.info("Connection status: $connected/$total endpoints connected")
+                logger.info("Статус подключения: $connected/$total подключено")
 
-                // Health check for connections
+                // Health check
                 clients.values.forEach { connection ->
                     if (connection.isConnected) {
                         scope.launch {
                             try {
-                                connection.client.namespaceTable // Simple health check
-                            } catch (e: Exception) {
-                                logger.warn("Health check failed for ${connection.endpoint.url}")
+                                connection.client.namespaceTable // Простой health check
+                            } catch (_: Exception) {
+                                logger.warn("Ошибка проверки доступности ${connection.endpoint.url}")
                                 connection.isConnected = false
                                 scheduleReconnect(connection.endpoint.url)
                             }
@@ -238,7 +239,7 @@ class OpcUaConnectionManager(
 
     @PreDestroy
     fun cleanup() {
-        logger.info("Shutting down OPC UA connection manager")
+        logger.info("Завершается работа менеджера подключений OPC UA.")
         scope.cancel()
 
         clients.values.forEach { connection ->
@@ -247,11 +248,11 @@ class OpcUaConnectionManager(
                 connection.reconnectJob?.cancel()
                 connection.client.disconnect().get()
             } catch (e: Exception) {
-                logger.warn("Error disconnecting from ${connection.endpoint.url}", e)
+                logger.warn("Ошибка отключения от ${connection.endpoint.url}", e)
             }
         }
 
         clients.clear()
-        logger.info("OPC UA connection manager shutdown complete")
+        logger.info("Менеджер подключений OPC UA завершил работу.")
     }
 }

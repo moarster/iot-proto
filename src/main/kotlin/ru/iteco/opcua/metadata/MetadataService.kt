@@ -6,7 +6,8 @@ import kotlinx.coroutines.reactive.awaitFirstOrNull
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.stereotype.Service
-import ru.iteco.opcua.metadata.Metadata.Companion.getMetadataNodesFor
+import ru.iteco.opcua.model.Metadata
+import ru.iteco.opcua.model.Metadata.Companion.getMetadataNodesFor
 import ru.iteco.opcua.model.MeterType.Companion.fromString
 import java.time.Duration
 
@@ -68,9 +69,11 @@ class MetadataService(
         return "uspd:$endpointUrl;$nodeId"
     }
 
+
+    //TODO: Вероятно к удалению
     suspend fun getMeasurementMetadata(endpointUrl: String, node: NodeClassification): Metadata {
         // USPD GUID
-        val metadata=Metadata()
+        val metadata= Metadata()
         val metadataNodes = getMetadataNodesFor(node)
         val metadataCache = getBatchMetadata(endpointUrl, metadataNodes.values.toList())
 

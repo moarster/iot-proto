@@ -22,13 +22,8 @@ class MetadataPreloader(
      * Предварительная загрузка всех метаданных при подключении к серверу
      */
     suspend fun preloadMetadata(connection: OpcUaConnectionManager.ClientConnection) {
-        // TODO: 1. Получить все узлы метаданных для данного endpoint
-        // TODO: 2. Проверить, что есть в кэше (batch-операция)
-        // TODO: 3. Batch-загрузить недостающие метаданные с сервера
-        // TODO: 4. Закэшировать полученные данные согласно стратегиям
-
         // Определяем какие метаданные нужны для этого endpoint
-        val metadataNodes = nodeClassifier.buildMetadataNodeIds(connection.endpoint)
+        val metadataNodes = nodeClassifier.buildCachedMetadataNodeIds(connection.endpoint)
 
         // Группируем по стратегиям кэширования
         metadataNodes.forEach { (strategy, nodeIds) ->
@@ -40,7 +35,7 @@ class MetadataPreloader(
                 // Загружаем недостающие с сервера BATCH-операцией
                 val freshMetadata = batchReadMetadataFromServer(connection, missing)
 
-                // Кэшируем согласно стратегии
+                // TODO: Учитывать стратегию кэширования
                 freshMetadata.forEach { (nodeId, metadata) ->
                     metadataService.cacheMetadata(connection.endpoint.url, nodeId, metadata)
                 }
@@ -53,11 +48,11 @@ class MetadataPreloader(
         connection: OpcUaConnectionManager.ClientConnection,
         nodeIds: List<String>
     ): Map<String, NodeMetadata> {
-        // TODO: Использовать OPC UA batch read для эффективного чтения
+
         val readValueIds = nodeIds.map { nodeId ->
             ReadValueId(NodeId.parse(nodeId), AttributeId.Value.uid(), null, QualifiedName.NULL_VALUE)
         }
-
+        // Используем OPC UA batch read для эффективного чтения
         val dataValues = connection.client.read(0.0, TimestampsToReturn.Both, readValueIds).get().results
         return dataValues.withIndex().associate {
             nodeIds[it.index] to NodeMetadata(

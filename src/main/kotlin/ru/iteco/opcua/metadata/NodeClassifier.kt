@@ -8,7 +8,7 @@ import ru.iteco.opcua.config.NodeIdsConfig
 class NodeClassifier(private val nodeIdsConfig: NodeIdsConfig) {
 
     fun classifyNode(nodeId: String): NodeClassification {
-        val basePrefix = "ns=2;s=GIUSController."
+        val basePrefix = "ns=2;s=GIUSController." // TODO: это наверное в конфиг надо
         val nodeIdParts = nodeId.removePrefix(basePrefix).split(".")
 
         fun matches(part: String, pattern: Regex) = pattern.matches(part)
@@ -80,22 +80,24 @@ class NodeClassifier(private val nodeIdsConfig: NodeIdsConfig) {
         }
     }
 
-    fun buildMetadataNodeIds(uspd: Endpoint): Map<MetadataCacheStrategy, List<String>> {
-        // TODO: Группируем узлы метаданных по стратегиям кэширования
-        // Это позволит batch-загружать метаданные оптимально
+    /**
+     * Формирует список NodeI, сгруппированных по стратегиям кэширования метаданных.
+     *
+     * @param uspd Конфигурация УСПД.
+     * @return Карта, где ключ — стратегия кэширования, а значение — список сформированных NodeId.
+     */
+    fun buildCachedMetadataNodeIds(uspd: Endpoint): Map<MetadataCacheStrategy, List<String>> {
         return mapOf(
             MetadataCacheStrategy.CONTROLLER_STATIC to nodeIdsConfig.uspd.map{"ns=2;s=GIUSController.$it"},
-            MetadataCacheStrategy.METER_STATIC to uspd.meters.map { meter ->
+            MetadataCacheStrategy.METER_STATIC to uspd.meters.flatMap { meter ->
                                                                     nodeIdsConfig.meter.map {"ns=2;s=GIUSController.${meter.guid}.$it"}
-                                                                }.flatten(),
-            MetadataCacheStrategy.SUBSYSTEM_STATIC to uspd.meters.map { meter ->
-                meter.subs.map { sub ->
-                    nodeIdsConfig.sub.map {"ns=2;s=GIUSController.${meter.guid}.$sub.$it"}
+                                                                },
+            MetadataCacheStrategy.SUBSYSTEM_STATIC to uspd.meters.flatMap { meter ->
+                meter.subs.flatMap { sub ->
+                    nodeIdsConfig.sub.map { "ns=2;s=GIUSController.${meter.guid}.$sub.$it" }
                 }
-            }.flatten().flatten()
+            }
         )
-
-
     }
 
 }
